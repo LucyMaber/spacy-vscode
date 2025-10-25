@@ -5,6 +5,7 @@ from lsprotocol.types import (
     DidOpenTextDocumentParams,
     DidSaveTextDocumentParams,
     Hover,
+    MessageType,
     TextDocumentPositionParams,
 )
 
@@ -13,6 +14,7 @@ import spacy
 from .feature_hover import hover
 from .feature_validation import validate_config
 from .spacy_server import SpacyLanguageServer
+from .pygls_compat import get_text_document, window_show_message
 
 
 spacy_server = SpacyLanguageServer("pygls-spacy-server", "v0.1")
@@ -25,10 +27,13 @@ def hover_feature(
     """Implement Hover functionality"""
 
     if spacy_server.doc_uri != params.text_document.uri:
-        document = server.workspace.get_document(params.text_document.uri)
-        spacy_server.config = validate_config(server=server, cfg=document.source)
-        if spacy_server.config:
-            spacy_server.doc_uri = params.text_document.uri
+        document = get_text_document(server, params.text_document.uri)
+        if document is not None:
+            spacy_server.config = validate_config(server=server, cfg=document.source)
+            if spacy_server.config:
+                spacy_server.doc_uri = params.text_document.uri
+        else:
+            return None
 
     return hover(server, params)
 
@@ -39,13 +44,14 @@ async def did_open(server: SpacyLanguageServer, params: DidOpenTextDocumentParam
     spacy_server.config = validate_config(server=server, cfg=params.text_document.text)
     if spacy_server.config:
         spacy_server.doc_uri = params.text_document.uri
-        server.show_message("spaCy Extension Active")
+        window_show_message(server, "spaCy Extension Active", MessageType.Info)
 
 
 @spacy_server.feature(TEXT_DOCUMENT_DID_SAVE)
 async def did_save(server: SpacyLanguageServer, params: DidSaveTextDocumentParams):
     """Text document did save notification."""
-    document = server.workspace.get_document(params.text_document.uri)
-    spacy_server.config = validate_config(server=server, cfg=document.source)
-    if spacy_server.config:
-        spacy_server.doc_uri = params.text_document.uri
+    document = get_text_document(server, params.text_document.uri)
+    if document is not None:
+        spacy_server.config = validate_config(server=server, cfg=document.source)
+        if spacy_server.config:
+            spacy_server.doc_uri = params.text_document.uri

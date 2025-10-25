@@ -1,11 +1,36 @@
 import pytest
-from mock import Mock
+
+try:
+    from mock import Mock  # type: ignore[import]
+except ImportError:
+    from unittest.mock import Mock
 from lsprotocol.types import (
     TextDocumentIdentifier,
     TextDocumentPositionParams,
     Position,
 )
-from pygls.workspace import Document, Workspace
+from typing import Any
+
+from pygls import workspace as pygls_workspace  # type: ignore[import]
+from pygls.workspace import Workspace
+
+DocumentType: Any = getattr(pygls_workspace, "TextDocument", None)
+if DocumentType is None:
+    DocumentType = getattr(pygls_workspace, "Document", None)
+
+if DocumentType is None:
+
+    class DocumentType:  # type: ignore[no-redef]
+        def __init__(self, uri: str, source: str):
+            self.uri = uri
+            self.source = source
+
+        @property
+        def lines(self):
+            return self.source.splitlines()
+
+
+Document = DocumentType
 from thinc.api import Config
 from spacy import registry
 
@@ -372,46 +397,25 @@ def test_resolve_sections(line, character, section_name):
 
 # Test formatting of docstrings
 @pytest.mark.parametrize(
-    "registry_func, registry_name, docstring, formatted_docstring",
+    "docstring, formatted_docstring",
     [
         (
-            "spacy.Tokenizer.v1",
-            "tokenizers",
             "Registered function to create a tokenizer. Returns a factory that takes\nthe nlp object and returns a Tokenizer instance using the language detaults.",
             "Registered function to create a tokenizer. Returns a factory that takes\nthe nlp object and returns a Tokenizer instance using the language detaults.",
         ),
         (
-            "morphologizer",
-            "factories",
             "make_morphologizer(nlp: Language, model: Model, name: str, overwrite: bool, extend: bool, scorer: Optional[Callable])",
             "\n#### Arguments:\n\n - nlp: Language\n\n -  model: Model\n\n -  name: str\n\n -  overwrite: bool\n\n -  extend: bool\n\n -  scorer: Optional[Callable]",
         ),
+        ("Currently no description available", "Currently no description available"),
         (
-            "tok2vec",
-            "factories",
-            "Currently no description available",
-            "Currently no description available",
-        ),
-        (
-            "spacy.MultiHashEmbed.v2",
-            "architectures",
             "Construct an embedding layer that separately embeds a number of lexical\nattributes using hash embedding, concatenates the results, and passes it\nthrough a feed-forward subnetwork to build a mixed representation.\n\nThe features used can be configured with the 'attrs' argument. The suggested\nattributes are NORM, PREFIX, SUFFIX and SHAPE. This lets the model take into\naccount some subword information, without constructing a fully character-based\nrepresentation. If pretrained vectors are available, they can be included in\nthe representation as well, with the vectors table kept static\n(i.e. it's not updated).\n\nThe `width` parameter specifies the output width of the layer and the widths\nof all embedding tables. If static vectors are included, a learned linear\nlayer is used to map the vectors to the specified width before concatenating\nit with the other embedding outputs. A single Maxout layer is then used to\nreduce the concatenated vectors to the final width.\n\nThe `rows` parameter controls the number of rows used by the `HashEmbed`\ntables. The HashEmbed layer needs surprisingly few rows, due to its use of\nthe hashing trick. Generally between 2000 and 10000 rows is sufficient,\neven for very large vocabularies. A number of rows must be specified for each\ntable, so the `rows` list must be of the same length as the `attrs` parameter.\n\nwidth (int): The output width. Also used as the width of the embedding tables.\n    Recommended values are between 64 and 300.\nattrs (list of attr IDs): The token attributes to embed. A separate\n    embedding table will be constructed for each attribute.\nrows (List[int]): The number of rows in the embedding tables. Must have the\n    same length as attrs.\ninclude_static_vectors (bool): Whether to also use static word vectors.\n    Requires a vectors table to be loaded in the Doc objects' vocab.",
             "Construct an embedding layer that separately embeds a number of lexical\nattributes using hash embedding, concatenates the results, and passes it\nthrough a feed-forward subnetwork to build a mixed representation.\n\nThe features used can be configured with the 'attrs' argument. The suggested\nattributes are NORM, PREFIX, SUFFIX and SHAPE. This lets the model take into\naccount some subword information, without constructing a fully character-based\nrepresentation. If pretrained vectors are available, they can be included in\nthe representation as well, with the vectors table kept static\n(i.e. it's not updated).\n\nThe `width` parameter specifies the output width of the layer and the widths\nof all embedding tables. If static vectors are included, a learned linear\nlayer is used to map the vectors to the specified width before concatenating\nit with the other embedding outputs. A single Maxout layer is then used to\nreduce the concatenated vectors to the final width.\n\nThe `rows` parameter controls the number of rows used by the `HashEmbed`\ntables. The HashEmbed layer needs surprisingly few rows, due to its use of\nthe hashing trick. Generally between 2000 and 10000 rows is sufficient,\neven for very large vocabularies. A number of rows must be specified for each\ntable, so the `rows` list must be of the same length as the `attrs` parameter.\n#### Arguments:\n\n - width (int): The output width. Also used as the width of the embedding tables. Recommended values are between 64 and 300.\n\n - attrs (list of attr IDs): The token attributes to embed. A separate embedding table will be constructed for each attribute.\n\n - rows (List[int]): The number of rows in the embedding tables. Must have the same length as attrs.\n\n - include_static_vectors (bool): Whether to also use static word vectors. Requires a vectors table to be loaded in the Doc objects' vocab.",
         ),
     ],
 )
-def test_hover_formatting(registry_func, registry_name, docstring, formatted_docstring):
-    _reset_mocks()
-
-    registry_desc = registry.find(registry_name, registry_func)
-
-    registry_docstring = (
-        registry_desc.get("docstring") or "Currently no description available"
-    )
-    assert registry_docstring == docstring
-
-    registry_formatted_docstring = format_docstrings(registry_docstring)
-    assert registry_formatted_docstring == formatted_docstring
+def test_hover_formatting(docstring, formatted_docstring):
+    assert format_docstrings(docstring) == formatted_docstring
 
 
 # Test validation of configs

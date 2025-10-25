@@ -14,6 +14,7 @@ import re
 from typing import Optional
 from spacy import registry, schemas, glossary
 from .spacy_server import SpacyLanguageServer
+from .pygls_compat import get_text_document
 from .util import get_current_word, SpanInfo, format_docstrings
 from dataclasses import dataclass
 from catalogue import RegistryError  # type:ignore[import]
@@ -37,7 +38,7 @@ def hover(
     """
     Implements the Hover functionality
     """
-    document = server.workspace.get_document(params.text_document.uri)
+    document = get_text_document(server, params.text_document.uri)
 
     if not document:
         return None
@@ -85,6 +86,8 @@ def registry_resolver(
     w_start (int): The start index of the current_word.
     w_end (int): The end index of the current_word.
     """
+
+    ensure_spacy_registries_warmed()
 
     registry_span = detect_registry_func(line_str, current_word, w_start, w_end)
     if registry_span:
@@ -168,6 +171,26 @@ def detect_registry_func(
         return SpanInfo(full_registry_func, registry_func_start, registry_func_end)
 
     return None
+
+
+_REGISTRY_WARMED = False
+
+
+def ensure_spacy_registries_warmed() -> None:
+    """Ensure spaCy registers built-in factories for hover lookups."""
+    global _REGISTRY_WARMED
+    if _REGISTRY_WARMED:
+        return
+
+    try:
+        from spacy.lang.en import English  # type: ignore[import]
+
+        English()  # noqa: B018 – instantiate for side effects only
+    except Exception:
+        # If registry can't be warmed, hover resolver will just return None.
+        pass
+
+    _REGISTRY_WARMED = True
 
 
 def detect_registry_name(line: str, registry_start: int) -> str:

@@ -1,4 +1,8 @@
-from pygls.server import LanguageServer
+try:
+    # pygls >= 1.3 exposes LanguageServer under pygls.lsp.server
+    from pygls.lsp.server import LanguageServer
+except ImportError:  # pragma: no cover - fallback for older pygls
+    from pygls.server import LanguageServer
 
 from thinc.api import Config
 from typing import Optional
